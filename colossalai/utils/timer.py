@@ -2,12 +2,12 @@
 # -*- encoding: utf-8 -*-
 import time
 from typing import Tuple
-from .cuda import synchronize
+
+from colossalai.accelerator import get_accelerator
 
 
 class Timer:
-    """A timer object which helps to log the execution times, and provides different tools to assess the times.
-    """
+    """A timer object which helps to log the execution times, and provides different tools to assess the times."""
 
     def __init__(self):
         self._started = False
@@ -21,20 +21,18 @@ class Timer:
 
     @property
     def current_time(self) -> float:
-        synchronize()
+        get_accelerator().synchronize()
         return time.time()
 
     def start(self):
-        """Firstly synchronize cuda, reset the clock and then start the timer.
-        """
+        """Firstly synchronize cuda, reset the clock and then start the timer."""
         self._elapsed = 0
-        synchronize()
+        get_accelerator().synchronize()
         self._start_time = time.time()
         self._started = True
 
     def lap(self):
-        """lap time and return elapsed time
-        """
+        """lap time and return elapsed time"""
         return self.current_time - self._start_time
 
     def stop(self, keep_in_history: bool = False):
@@ -46,7 +44,7 @@ class Timer:
         Returns:
             int: Start-stop interval.
         """
-        synchronize()
+        get_accelerator().synchronize()
         end_time = time.time()
         elapsed = end_time - self._start_time
         if keep_in_history:
@@ -80,12 +78,11 @@ class Timer:
         Note:
             Use it only when timer is not in progress
         """
-        assert not self._started, 'Timer is still in progress'
+        assert not self._started, "Timer is still in progress"
         return self._elapsed
 
     def reset(self):
-        """Clear up the timer and its history
-        """
+        """Clear up the timer and its history"""
         self._history = []
         self._started = False
         self._elapsed = 0
@@ -126,7 +123,7 @@ class MultiTimer:
             return None
 
     def get_timer(self, name):
-        """Get timer by its name (from multitimer)
+        """Get timer by its name (from multimer)
 
         Args:
             name (str): Timer's key.

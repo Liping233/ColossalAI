@@ -7,7 +7,7 @@ from colossalai.tensor.colo_tensor import ColoTensor
 
 
 def all_gather_simulator(target_pair):
-    '''
+    """
     Simulating all-gather operation, analyze the communication cost
     and simulate the influence of the DimSpec.
 
@@ -18,8 +18,8 @@ def all_gather_simulator(target_pair):
 
     Argument:
         target_pair(Tuple[int, List[int]]): The first element is the dimension of tensor to be sharded,
-        and the second element decribes which logical axis will be sharded in that dimension.
-    '''
+        and the second element describes which logical axis will be sharded in that dimension.
+    """
     _, shard_list = target_pair
     new_shard_list = shard_list[:-1]
 
@@ -27,7 +27,7 @@ def all_gather_simulator(target_pair):
 
 
 def all_to_all_simulator(f_target_pair, b_target_pair):
-    '''
+    """
     Simulating all-to-all operation, analyze the communication cost
     and simulate the influence of the DimSpec.
 
@@ -36,7 +36,7 @@ def all_to_all_simulator(f_target_pair, b_target_pair):
     Therefore, if the behind shard_list is not None, we just extend it to the front shard_list.
     Argument:
         target_pair(Tuple[int, List[int]]): The first element is the dimension of tensor to be sharded,
-        and the second element decribes which logical axis will be sharded in that dimension.
+        and the second element describes which logical axis will be sharded in that dimension.
     e.g.:
         all-to-all(S0, S1) -> [S01, R]
         all-to-all(S0, R) -> [R, S0]
@@ -46,8 +46,8 @@ def all_to_all_simulator(f_target_pair, b_target_pair):
 
     Argument:
         target_pair(Tuple[int, List[int]]): The first element is the dimension of tensor to be sharded,
-        and the second element decribes which logical axis will be sharded in that dimension.
-    '''
+        and the second element describes which logical axis will be sharded in that dimension.
+    """
     _, f_shard_list = f_target_pair
     _, b_shard_list = b_target_pair
     if not len(b_shard_list):
@@ -61,7 +61,7 @@ def all_to_all_simulator(f_target_pair, b_target_pair):
 
 
 def shard_simulator(target_pair, legal_sharding_dims):
-    '''
+    """
     Simulating shard operation, analyze the communication cost(always ZERO)
     and simulate the influence of the DimSpec.
 
@@ -77,8 +77,8 @@ def shard_simulator(target_pair, legal_sharding_dims):
 
     Argument:
         target_pair(Tuple[int, List[int]]): The first element is the dimension of tensor to be sharded,
-        and the second element decribes which logical axis will be sharded in that dimension.
-    '''
+        and the second element describes which logical axis will be sharded in that dimension.
+    """
     _, shard_list = target_pair
     shard_list_list = []
     for dim in legal_sharding_dims:
@@ -90,10 +90,35 @@ def shard_simulator(target_pair, legal_sharding_dims):
     return shard_list_list
 
 
+def mix_gather_simulator(f_target_pair, b_target_pair):
+    """
+    Assume index of f and b target pairs are 'f' and 'b'
+    S0S1 => Input: (f, [0]), (b, [1]) Output: [b, f], (1, 0)
+    S1S0 => Input: (f, [1]), (b, [0]) Output: [b, f], (0, 1)
+    S01R => Input: (f, [0, 1]), (b, []) Output: [f], (1, 1)
+    RS01 => Input: (f, []), (b, [0, 1]) Output: [b], (1, 1)
+    S10R => Input: (f, [0, 1]), (b, []) Output: [f], (0, 0)
+    RS10 => Input: (f, []), (b, [0, 1]) Output: [b], (0, 0)
+    """
+    if f_target_pair[1] and b_target_pair[1]:
+        leading_dim = b_target_pair[1] > f_target_pair[1]
+        return [b_target_pair[0], f_target_pair[0]], [int(leading_dim), int(leading_dim ^ 1)]
+    if f_target_pair[1]:
+        leading_dim = f_target_pair[1][0] < f_target_pair[1][1]
+        return [
+            f_target_pair[0],
+        ], [int(leading_dim), int(leading_dim)]
+    if b_target_pair[1]:
+        leading_dim = b_target_pair[1][0] < b_target_pair[1][1]
+        return [
+            b_target_pair[0],
+        ], [int(leading_dim), int(leading_dim)]
+
+
 # The function is credited to PyTorch Team
 def named_params_with_colotensor(
     module: nn.Module,
-    prefix: str = '',
+    prefix: str = "",
     recurse: bool = True,
 ) -> Iterator[Tuple[str, Union[nn.Parameter, ColoTensor]]]:
     r"""Returns an iterator over module parameters (together with the
@@ -129,7 +154,7 @@ def named_params_with_colotensor(
         for name, val in vars(mod).items():
             if isinstance(val, ColoTensor) and val not in memo:
                 memo.add(val)
-                name = mod_prefix + ('.' if mod_prefix else '') + name
+                name = mod_prefix + ("." if mod_prefix else "") + name
                 yield name, val
 
     # find all nn.Parameters
@@ -144,15 +169,16 @@ def _convert_tensor(tensor: torch.Tensor) -> ColoTensor:
 def convert_parameter(module: torch.nn.Module, param_name: str):
     # Perform some validation first.
     if not hasattr(module, param_name):
-        raise ValueError(f'module: {module} does not have parameter with name: {param_name}')
+        raise ValueError(f"module: {module} does not have parameter with name: {param_name}")
 
     tensor = getattr(module, param_name)
     if not isinstance(tensor, torch.Tensor):
         raise ValueError(
-            f'Expected {type(module).__name__}.{param_name} to be a Tensor, but found {type(tensor).__name__}')
+            f"Expected {type(module).__name__}.{param_name} to be a Tensor, but found {type(tensor).__name__}"
+        )
 
     if not tensor.is_contiguous():
-        raise ValueError(f'param: {param_name} is not a contiguous Tensor')
+        raise ValueError(f"param: {param_name} is not a contiguous Tensor")
 
     st = _convert_tensor(tensor)
 
@@ -168,9 +194,9 @@ def convert_parameter(module: torch.nn.Module, param_name: str):
 
 
 def convert_dim_partition_dict(dim_size: int, dim_partition_dict: Dict[int, List[int]]) -> Dict[int, List[int]]:
-    '''
+    """
     This method is used to convert the negative dim value to positive.
-    '''
+    """
     dims_to_convert = []
     for dim, mesh_list in dim_partition_dict.items():
         if dim < 0:
@@ -182,13 +208,13 @@ def convert_dim_partition_dict(dim_size: int, dim_partition_dict: Dict[int, List
 
 
 def merge_same_dim_mesh_list(dim_size: int, dim_partition_dict: Dict[int, List[int]]) -> Dict[int, List[int]]:
-    '''
+    """
     This method is used to merge the different key value which points to same physical position.
 
     For example:
         dim_partition_dict: {1 :[0], -1: [1]} or {1: [0], 1: [1]} for a 2d tensor, the dim 1 and -1 point same physical position.
         In this method, above dim_partition_dict will be converted to {1: [0, 1]}
-    '''
+    """
     converted_dim_partition_dict = {}
     for dim, mesh_list in dim_partition_dict.items():
         if dim < 0:
